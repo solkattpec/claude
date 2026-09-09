@@ -17,8 +17,9 @@ set -euo pipefail
 
 LANDING1="${LANDING1:-}"
 LANDING2="${LANDING2:-}"
-PORT1="${PORT1:-443}"
-PORT2="${PORT2:-8443}"
+PORT0="${PORT0:-2053}"   # 从中转机本身出口，不经落地
+PORT1="${PORT1:-443}"    # 转发到落地1
+PORT2="${PORT2:-8443}"   # 转发到落地2
 DEST="${DEST:-www.yahoo.com}"
 SB_VERSION="${SB_VERSION:-}"
 CONF_DIR=/etc/sing-box
@@ -201,6 +202,7 @@ log "写入 $CONF_DIR/config.json"
   echo '{'
   echo '  "log": { "level": "warn", "timestamp": true },'
   echo '  "inbounds": ['
+  inbound_json "in-direct" "$PORT0"; echo '    ,'
   inbound_json "in-l1" "$PORT1"; echo '    ,'
   inbound_json "in-l2" "$PORT2"
   echo '  ],'
@@ -211,6 +213,7 @@ log "写入 $CONF_DIR/config.json"
   echo '  ],'
   echo '  "route": {'
   echo '    "rules": ['
+  echo '      { "inbound": ["in-direct"], "outbound": "direct" },'
   echo '      { "inbound": ["in-l1"], "outbound": "landing1" },'
   echo '      { "inbound": ["in-l2"], "outbound": "landing2" }'
   echo '    ],'
@@ -267,14 +270,16 @@ ok "拥塞控制：$(sysctl -n net.ipv4.tcp_congestion_control)"
 
 # ---------- 9. 放行端口 ----------
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+  ufw allow "${PORT0}/tcp" >/dev/null
   ufw allow "${PORT1}/tcp" >/dev/null; ufw allow "${PORT2}/tcp" >/dev/null
-  ok "ufw 已放行 ${PORT1},${PORT2}/tcp"
+  ok "ufw 已放行 ${PORT0},${PORT1},${PORT2}/tcp"
 fi
 
 # ---------- 10. 输出 ----------
 RELAY_IP="$(curl -fsSL --max-time 8 https://api.ipify.org || hostname -I | awk '{print $1}')"
 cat > "$OUT_DIR/credentials.env" <<EOF
 RELAY_IP=${RELAY_IP}
+PORT0=${PORT0}
 PORT1=${PORT1}
 PORT2=${PORT2}
 UUID=${UUID}
@@ -284,12 +289,17 @@ SHORT_ID=${SHORT_ID}
 DEST=${DEST}
 LANDING1_EXIT=${L_EXIT[1]}
 LANDING2_EXIT=${L_EXIT[2]}
+LANDING1_SPEC='${L_HOST[1]}:${L_PORTS[1]}:${L_USERS[1]}:${L_PASSES[1]}'
+LANDING2_SPEC='${L_HOST[2]}:${L_PORTS[2]}:${L_USERS[2]}:${L_PASSES[2]}'
+LANDING1_TYPE=${L_TYPE[1]}
+LANDING2_TYPE=${L_TYPE[2]}
 EOF
 chmod 600 "$OUT_DIR/credentials.env"
 
 echo
 ok "中转机部署完成：${RELAY_IP}"
 echo "────────────────────────────────────────────────────────"
+echo " ${RELAY_IP}:${PORT0}  ->  直出（出口就是本机 ${RELAY_IP}）"
 echo " ${RELAY_IP}:${PORT1}  ->  落地1 ${L_HOST[1]}:${L_PORTS[1]} (${L_TYPE[1]})  出口 ${L_EXIT[1]}"
 echo " ${RELAY_IP}:${PORT2}  ->  落地2 ${L_HOST[2]}:${L_PORTS[2]} (${L_TYPE[2]})  出口 ${L_EXIT[2]}"
 echo "────────────────────────────────────────────────────────"

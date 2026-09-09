@@ -1,18 +1,17 @@
 # ═══════════════════════════════════════════════════════════
 # Clash Verge Rev (mihomo) — macOS 全局 TUN
 #
-# 链路： Mac --VLESS-Reality--> 中转VPS --SOCKS5/HTTP--> 落地代理 --> 互联网
+# 4 个节点 = 4 个不同的出口 IP，名字里写的就是网站看到的地址：
 #
-# 4 个节点 = 2 中转 × 2 落地。中转上一个端口对应一个落地，
-# 所以在 GUI 里切节点就等于切「走哪台中转 + 从哪个落地出去」。
+#   直出 <中转1IP>        Mac ──Reality──▶ 中转1 ──▶ 网站        出口 = 中转1 自己
+#   直出 <中转2IP>        Mac ──Reality──▶ 中转2 ──▶ 网站        出口 = 中转2 自己
+#   <中转1> → <落地1IP>   Mac ──Reality──▶ 中转1 ──socks5──▶ 落地1
+#   <中转2> → <落地2IP>   Mac ──Reality──▶ 中转2 ──socks5──▶ 落地2
 #
-# 占位符（用 render.sh 自动填）：
-#   __R1__ __R2__            两台中转机 IP
-#   __PORT1__ __PORT2__      中转机上对应落地1 / 落地2 的端口
-#   __UUID__ __PUBLIC_KEY__ __SHORT_ID__ __DEST__   中转机脚本输出的凭据
-#   __N11__ __N12__ __N21__ __N22__                 四个节点名，render.sh 自动拼
+# 全部走 VLESS-Reality 加密，落地代理的账号密码只存在中转机上，
+# 不出现在这份配置里。
 #
-# 节点名格式：「中转IP前两段 → 落地出口IP」。箭头右边就是网站看到的你的 IP。
+# 占位符由 render.sh 填。
 # ═══════════════════════════════════════════════════════════
 
 mixed-port: 7897
@@ -30,23 +29,17 @@ profile:
   store-selected: true
   store-fake-ip: true
 
-# ─── TUN（全局接管）───────────────────────────────────────
-# Clash Verge Rev 的 GUI「Tun Mode」开关会覆盖这一段，以 GUI 为准。
-# 这里保留是给直接跑 mihomo 二进制的场景用的。
 tun:
   enable: true
-  stack: gvisor          # macOS 上兼容性最好；想更快可试 mixed
+  stack: gvisor
   auto-route: true
   auto-detect-interface: true
-  strict-route: false    # macOS 上开 true 容易和其他 VPN/虚拟机打架
+  strict-route: false
   dns-hijack:
     - "any:53"
     - "tcp://any:53"
   mtu: 1500
 
-# ─── DNS ─────────────────────────────────────────────────
-# 走代理的域名用 fake-ip，不在本地解析，域名原样传到落地代理去解析：
-# 既不会 DNS 泄露，流媒体的地区判断也跟着落地 IP 走。
 dns:
   enable: true
   listen: 0.0.0.0:1053
@@ -99,7 +92,40 @@ sniffer:
 
 # ─── 节点 ─────────────────────────────────────────────────
 proxies:
-  - name: "__N11__"          # 中转1 → 落地1
+  # ① 中转1 直出（出口就是中转1 的 IP）
+  - name: "__N1__"
+    type: vless
+    server: __R1__
+    port: __PORT0__
+    uuid: __UUID__
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: __DEST__
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: __PUBLIC_KEY__
+      short-id: "__SHORT_ID__"
+
+  # ② 中转2 直出（出口就是中转2 的 IP）
+  - name: "__N2__"
+    type: vless
+    server: __R2__
+    port: __PORT0__
+    uuid: __UUID__
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: __DEST__
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: __PUBLIC_KEY__
+      short-id: "__SHORT_ID__"
+
+  # ③ 中转1 → 落地1
+  - name: "__N3__"
     type: vless
     server: __R1__
     port: __PORT1__
@@ -114,37 +140,8 @@ proxies:
       public-key: __PUBLIC_KEY__
       short-id: "__SHORT_ID__"
 
-  - name: "__N12__"          # 中转1 → 落地2
-    type: vless
-    server: __R1__
-    port: __PORT2__
-    uuid: __UUID__
-    network: tcp
-    udp: true
-    tls: true
-    flow: xtls-rprx-vision
-    servername: __DEST__
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: __PUBLIC_KEY__
-      short-id: "__SHORT_ID__"
-
-  - name: "__N21__"          # 中转2 → 落地1
-    type: vless
-    server: __R2__
-    port: __PORT1__
-    uuid: __UUID__
-    network: tcp
-    udp: true
-    tls: true
-    flow: xtls-rprx-vision
-    servername: __DEST__
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: __PUBLIC_KEY__
-      short-id: "__SHORT_ID__"
-
-  - name: "__N22__"          # 中转2 → 落地2
+  # ④ 中转2 → 落地2
+  - name: "__N4__"
     type: vless
     server: __R2__
     port: __PORT2__
@@ -159,37 +156,21 @@ proxies:
       public-key: __PUBLIC_KEY__
       short-id: "__SHORT_ID__"
 
+# 只留一个选择器，界面上就是 4 个节点 + 这一个分组
 proxy-groups:
   - name: PROXY
     type: select
-    proxies: [自动选择, "__N11__", "__N12__", "__N21__", "__N22__", DIRECT]
-
-  - name: 自动选择
-    type: url-test
-    proxies: ["__N11__", "__N12__", "__N21__", "__N22__"]
-    url: "https://www.gstatic.com/generate_204"
-    interval: 300
-    tolerance: 50
-
-  # 流媒体单独一组：落地 IP 决定能不能解锁，两个落地可以分别试
-  - name: 国外媒体
-    type: select
-    proxies: [PROXY, "__N11__", "__N12__", "__N21__", "__N22__"]
+    proxies: ["__N1__", "__N2__", "__N3__", "__N4__", DIRECT]
 
 # ─── 规则 ─────────────────────────────────────────────────
 rules:
-  # 中转机自身流量必须直连，否则成环
+  # 两台中转机自身的流量必须直连，否则成环
   - IP-CIDR,__R1__/32,DIRECT,no-resolve
   - IP-CIDR,__R2__/32,DIRECT,no-resolve
 
   - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
   - GEOSITE,category-ads-all,REJECT
-
-  - GEOSITE,youtube,国外媒体
-  - GEOSITE,netflix,国外媒体
-  - GEOSITE,disney,国外媒体
-  - GEOSITE,spotify,国外媒体
 
   - GEOSITE,geolocation-!cn,PROXY
   - GEOSITE,cn,DIRECT
