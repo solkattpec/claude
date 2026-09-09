@@ -109,6 +109,30 @@ Clash Verge：配置 → `+` → **Remote** → 粘贴。
 > 用完就关是最稳的做法。托管在 GitHub raw 之类的公开地方则绝对不行——
 > 等于把你的节点白送给所有人。
 
+### 分享给别的设备
+
+同一条链接在任何设备上都能导入，脚本还会在终端里打一个**二维码**，
+手机、平板直接扫就行（把终端窗口调大些才扫得到）。
+
+支持 Clash 配置订阅的客户端：
+
+| 平台 | 客户端 |
+|---|---|
+| macOS / Windows / Linux | Clash Verge Rev |
+| Android | Clash Meta for Android、FlClash |
+| iOS | Stash、Shadowrocket |
+
+多台设备**共用同一份配置没问题**，同一个 UUID 可以同时连。
+
+默认 30 分钟的存活时间给别的设备导可能不够，加长一点：
+
+```bash
+TTL=7200 R2=<另一台中转IP> bash relay/serve-sub.sh    # 2 小时
+```
+
+⚠️ 把这条链接发给别人 = 把你的节点给对方随便用，而且对方能看到落地代理的
+出口 IP。只发给自己的设备。
+
 > Clash Verge Rev 的 GUI TUN 设置会覆盖配置文件里的 `tun:` 段，以 GUI 开关为准。
 
 ## 节点名

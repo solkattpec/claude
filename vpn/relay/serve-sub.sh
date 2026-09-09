@@ -145,6 +145,24 @@ echo "════════════════════════�
 echo "$URL"
 echo "════════════════════════════════════════════════════════"
 echo
+# 二维码：手机/平板扫一下就能导入，不用手输长链接
+if [ "${QR:-1}" = "1" ]; then
+  if ! command -v qrencode >/dev/null 2>&1; then
+    if   command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get install -y -qq qrencode >/dev/null 2>&1 || true
+    elif command -v dnf     >/dev/null 2>&1; then dnf install -y -q qrencode >/dev/null 2>&1 || true
+    elif command -v yum     >/dev/null 2>&1; then yum install -y -q qrencode >/dev/null 2>&1 || true
+    fi
+  fi
+  if command -v qrencode >/dev/null 2>&1; then
+    echo "手机 / 平板扫这个二维码导入（终端窗口调大一点才扫得到）："
+    echo
+    qrencode -t ANSIUTF8 -m 2 "$URL"
+    echo
+  else
+    warn "装不上 qrencode，跳过二维码；手动复制上面的链接也一样"
+  fi
+fi
+
 echo "Clash Verge 一键导入（Mac 上直接点/在浏览器地址栏敲）："
 echo "clash://install-config?url=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$URL")"
 echo
@@ -154,3 +172,4 @@ echo "导完就关掉（不留后门）：  systemctl stop clash-sub"
 echo "看谁取过：                journalctl -u clash-sub"
 echo "重跑本脚本链接不变，Clash Verge 里点「更新」即可拿到新配置。"
 echo "想换一条全新链接：        NEW_TOKEN=1 bash relay/serve-sub.sh"
+echo "给别的设备导、时间不够：  TTL=7200 bash relay/serve-sub.sh   （链接存活 2 小时）"
