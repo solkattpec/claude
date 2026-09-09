@@ -37,7 +37,35 @@ PUBLIC_KEY="${PUBLIC_KEY:-${PUB_KEY:-}}"
 : "${SHORT_ID:?必须提供 SHORT_ID}"
 : "${DEST:?必须提供 DEST}"
 
-sed -e "s|__R1__|${R1}|g" \
+# ── 节点名：「中转IP前两段 → 落地出口IP」 ───────────────────────
+# 箭头右边是网站实际看到的 IP。出口 IP 由 install.sh 探测后写进 credentials.env。
+# 想换成自己看得懂的名字（地区之类），跑之前设这四个变量即可，例如：
+#   R1_LABEL=香港 R2_LABEL=日本 L1_LABEL=美西 L2_LABEL=美东 bash render.sh ...
+short_ip() { echo "$1" | cut -d. -f1,2; }
+
+R1_LABEL="${R1_LABEL:-$(short_ip "$R1")}"
+R2_LABEL="${R2_LABEL:-$(short_ip "$R2")}"
+L1_LABEL="${L1_LABEL:-${LANDING1_EXIT:-落地1}}"
+L2_LABEL="${L2_LABEL:-${LANDING2_EXIT:-落地2}}"
+
+# 名字必须两两不同，否则 mihomo 会因重名节点报错
+[ "$R1_LABEL" = "$R2_LABEL" ] && { R1_LABEL="${R1_LABEL}-a"; R2_LABEL="${R2_LABEL}-b"; }
+[ "$L1_LABEL" = "$L2_LABEL" ] && { L1_LABEL="${L1_LABEL}-a"; L2_LABEL="${L2_LABEL}-b"; }
+
+N11="${R1_LABEL} → ${L1_LABEL}"
+N12="${R1_LABEL} → ${L2_LABEL}"
+N21="${R2_LABEL} → ${L1_LABEL}"
+N22="${R2_LABEL} → ${L2_LABEL}"
+
+case "${N11}${N12}${N21}${N22}" in
+  *"|"*) echo "节点名里不能有 | 字符" >&2; exit 1 ;;
+esac
+
+sed -e "s|__N11__|${N11}|g" \
+    -e "s|__N12__|${N12}|g" \
+    -e "s|__N21__|${N21}|g" \
+    -e "s|__N22__|${N22}|g" \
+    -e "s|__R1__|${R1}|g" \
     -e "s|__R2__|${R2}|g" \
     -e "s|__PORT1__|${PORT1}|g" \
     -e "s|__PORT2__|${PORT2}|g" \

@@ -10,6 +10,9 @@
 #   __R1__ __R2__            两台中转机 IP
 #   __PORT1__ __PORT2__      中转机上对应落地1 / 落地2 的端口
 #   __UUID__ __PUBLIC_KEY__ __SHORT_ID__ __DEST__   中转机脚本输出的凭据
+#   __N11__ __N12__ __N21__ __N22__                 四个节点名，render.sh 自动拼
+#
+# 节点名格式：「中转IP前两段 → 落地出口IP」。箭头右边就是网站看到的你的 IP。
 # ═══════════════════════════════════════════════════════════
 
 mixed-port: 7897
@@ -96,7 +99,7 @@ sniffer:
 
 # ─── 节点 ─────────────────────────────────────────────────
 proxies:
-  - name: "R1-L1"          # 中转1 → 落地1
+  - name: "__N11__"          # 中转1 → 落地1
     type: vless
     server: __R1__
     port: __PORT1__
@@ -111,7 +114,7 @@ proxies:
       public-key: __PUBLIC_KEY__
       short-id: "__SHORT_ID__"
 
-  - name: "R1-L2"          # 中转1 → 落地2
+  - name: "__N12__"          # 中转1 → 落地2
     type: vless
     server: __R1__
     port: __PORT2__
@@ -126,7 +129,7 @@ proxies:
       public-key: __PUBLIC_KEY__
       short-id: "__SHORT_ID__"
 
-  - name: "R2-L1"          # 中转2 → 落地1
+  - name: "__N21__"          # 中转2 → 落地1
     type: vless
     server: __R2__
     port: __PORT1__
@@ -141,7 +144,7 @@ proxies:
       public-key: __PUBLIC_KEY__
       short-id: "__SHORT_ID__"
 
-  - name: "R2-L2"          # 中转2 → 落地2
+  - name: "__N22__"          # 中转2 → 落地2
     type: vless
     server: __R2__
     port: __PORT2__
@@ -159,11 +162,11 @@ proxies:
 proxy-groups:
   - name: PROXY
     type: select
-    proxies: [自动选择, R1-L1, R1-L2, R2-L1, R2-L2, DIRECT]
+    proxies: [自动选择, "__N11__", "__N12__", "__N21__", "__N22__", DIRECT]
 
   - name: 自动选择
     type: url-test
-    proxies: [R1-L1, R1-L2, R2-L1, R2-L2]
+    proxies: ["__N11__", "__N12__", "__N21__", "__N22__"]
     url: "https://www.gstatic.com/generate_204"
     interval: 300
     tolerance: 50
@@ -171,7 +174,7 @@ proxy-groups:
   # 流媒体单独一组：落地 IP 决定能不能解锁，两个落地可以分别试
   - name: 国外媒体
     type: select
-    proxies: [PROXY, R1-L1, R1-L2, R2-L1, R2-L2]
+    proxies: [PROXY, "__N11__", "__N12__", "__N21__", "__N22__"]
 
 # ─── 规则 ─────────────────────────────────────────────────
 rules:

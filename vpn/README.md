@@ -98,12 +98,36 @@ Clash Verge：配置 → `+` → **Remote** → 粘贴。
 想让 Clash 能自动更新订阅就加 `KEEP=1`，代价是链接一直挂在公网上。
 随时手动关：`systemctl stop clash-sub`；看谁取过：`journalctl -u clash-sub`。
 
+**重跑本脚本链接不变**（端口和 token 存在 `/var/lib/clash-sub/.sub-meta`），
+所以改完配置重跑一次，在 Clash Verge 里点该订阅的「更新」就能拿到新版本，
+不用重新添加。想彻底换一条新链接：`NEW_TOKEN=1 bash relay/serve-sub.sh`。
+
 > 这条链接是明文 HTTP，里面有节点凭据。路径带 64 位随机 token、
 > 路径不对一律 404、不开目录列表，猜是猜不到的；但链路上的人能看到。
 > 用完就关是最稳的做法。托管在 GitHub raw 之类的公开地方则绝对不行——
 > 等于把你的节点白送给所有人。
 
 > Clash Verge Rev 的 GUI TUN 设置会覆盖配置文件里的 `tun:` 段，以 GUI 开关为准。
+
+## 节点名
+
+节点名自动拼成 **「中转IP前两段 → 落地出口IP」**，箭头右边就是网站实际看到的你的 IP：
+
+```
+38.150 → 72.13.245.7        走中转 38.150.32.52，从 72.13.245.7 出去
+154.29 → 198.65.46.163      走中转 154.29.155.128，从 198.65.46.163 出去
+```
+
+出口 IP 由 `install.sh` 探测后写进 `credentials.env`，不用手填。
+
+想换成自己看得懂的名字（比如按地区），渲染前设这四个变量：
+
+```bash
+R1_LABEL=香港 R2_LABEL=日本 L1_LABEL=美西 L2_LABEL=美东 \
+  R2=<中转2IP> bash client/render.sh credentials.env > my-vpn.yaml
+```
+
+在中转机上用 `serve-sub.sh` 出订阅时同理，把变量加在命令前面即可。
 
 ## 分流规则
 

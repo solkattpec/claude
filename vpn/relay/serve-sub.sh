@@ -33,12 +33,22 @@ command -v python3 >/dev/null 2>&1 || die "需要 python3：apt-get install -y p
 : "${R2:?必须指定 R2=<另一台中转的IP>}"
 [ -n "${RELAY_IP:-}" ] || die "$CRED 里没有 RELAY_IP"
 
-SUB_PORT="${SUB_PORT:-$(shuf -i 20000-60000 -n 1)}"
-TOKEN="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+# 端口和 token 存下来复用，重跑时链接不变
+# —— Clash Verge 里点「更新」就能拿到新配置，不用重新添加订阅。
+# 想换一条全新链接（比如怀疑旧的泄露了）：NEW_TOKEN=1 bash relay/serve-sub.sh
+mkdir -p "$SUBDIR"; chmod 700 "$SUBDIR"
+META="$SUBDIR/.sub-meta"
+if [ "${NEW_TOKEN:-0}" != "1" ] && [ -f "$META" ]; then
+  # shellcheck disable=SC1090
+  . "$META"
+fi
+SUB_PORT="${SUB_PORT:-${SAVED_PORT:-$(shuf -i 20000-60000 -n 1)}}"
+TOKEN="${SAVED_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+printf 'SAVED_PORT=%s\nSAVED_TOKEN=%s\n' "$SUB_PORT" "$TOKEN" > "$META"
+chmod 600 "$META"
 
 # ---------- 1. 渲染客户端配置 ----------
 log "渲染客户端配置"
-mkdir -p "$SUBDIR"; chmod 700 "$SUBDIR"
 rm -f "$SUBDIR"/*.yaml
 R1="$RELAY_IP" R2="$R2" bash "$DIR/client/render.sh" "$CRED" > "$SUBDIR/${TOKEN}.yaml"
 chmod 600 "$SUBDIR/${TOKEN}.yaml"
@@ -142,3 +152,5 @@ echo "或者在 Clash Verge：配置 → 右上角 + → Remote → 粘贴上面
 echo
 echo "导完就关掉（不留后门）：  systemctl stop clash-sub"
 echo "看谁取过：                journalctl -u clash-sub"
+echo "重跑本脚本链接不变，Clash Verge 里点「更新」即可拿到新配置。"
+echo "想换一条全新链接：        NEW_TOKEN=1 bash relay/serve-sub.sh"
