@@ -1,0 +1,6 @@
+# 含凭据，不要提交
+credentials.env
+*credentials*.env
+my-vpn.yaml
+*rendered*.yaml
+vpn/client/*.local.yaml

@@ -1,0 +1,146 @@
+# ═══════════════════════════════════════════════════════════
+# Clash Verge Rev (mihomo 内核) — macOS 全局 TUN 配置
+#
+# 占位符全部要替换（或用 render.sh 自动填）：
+#   __RELAY_IP__    中转机 IP
+#   __PORT__        中转机监听端口
+#   __UUID__        落地机脚本输出的 UUID
+#   __PUBLIC_KEY__  落地机脚本输出的 PublicKey
+#   __SHORT_ID__    落地机脚本输出的 ShortId
+#   __DEST__        落地机脚本输出的 Dest/SNI
+# ═══════════════════════════════════════════════════════════
+
+mixed-port: 7897
+allow-lan: false
+bind-address: "127.0.0.1"
+mode: rule
+log-level: info
+ipv6: true
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+global-client-fingerprint: chrome
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+# ─── TUN（全局接管）───────────────────────────────────────
+# 用 Clash Verge Rev 的话，优先用 GUI 里的「Tun Mode」开关，
+# GUI 设置会覆盖这里。这段是直接跑 mihomo 二进制时用的。
+tun:
+  enable: true
+  stack: gvisor          # macOS 上 gvisor 兼容性最好；追求速度可试 mixed
+  auto-route: true
+  auto-detect-interface: true
+  strict-route: false    # macOS 上开 true 容易和 VPN/虚拟机打架
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  mtu: 1500
+
+# ─── DNS ─────────────────────────────────────────────────
+# 走代理的域名用 fake-ip，真实解析交给落地机做，
+# 既不泄露 DNS，Netflix/YouTube 之类的地区判断也更准。
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: true
+  prefer-h3: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.localdomain"
+    - "+.home.arpa"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "captive.apple.com"
+    - "time.*.com"
+    - "time.*.apple.com"
+    - "ntp.*.com"
+    - "+.pool.ntp.org"
+    - "localhost.ptlogin2.qq.com"
+    - "+.srv.nintendo.net"
+    - "+.stun.playstation.net"
+    - "+.xboxlive.com"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  proxy-server-nameserver:
+    - https://223.5.5.5/dns-query
+  nameserver:
+    - https://223.5.5.5/dns-query
+    - https://1.12.12.12/dns-query
+  nameserver-policy:
+    "geosite:cn,private":
+      - https://223.5.5.5/dns-query
+      - https://1.12.12.12/dns-query
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - "+.push.apple.com"
+
+# ─── 节点 ─────────────────────────────────────────────────
+# server 填【中转机】IP，加密握手实际在【落地机】终结。
+proxies:
+  - name: "landing"
+    type: vless
+    server: __RELAY_IP__
+    port: __PORT__
+    uuid: __UUID__
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: __DEST__
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: __PUBLIC_KEY__
+      short-id: "__SHORT_ID__"
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - landing
+      - DIRECT
+
+  - name: 国外媒体
+    type: select
+    proxies:
+      - PROXY
+      - landing
+      - DIRECT
+
+# ─── 规则 ─────────────────────────────────────────────────
+rules:
+  # 中转机自身流量必须直连，否则成环
+  - IP-CIDR,__RELAY_IP__/32,DIRECT,no-resolve
+
+  - GEOSITE,private,DIRECT
+  - GEOIP,private,DIRECT,no-resolve
+  - GEOSITE,category-ads-all,REJECT
+
+  - GEOSITE,youtube,国外媒体
+  - GEOSITE,netflix,国外媒体
+  - GEOSITE,disney,国外媒体
+  - GEOSITE,spotify,国外媒体
+
+  - GEOSITE,geolocation-!cn,PROXY
+  - GEOSITE,cn,DIRECT
+  - GEOIP,CN,DIRECT
+
+  - MATCH,PROXY
