@@ -81,6 +81,28 @@ Clash Verge Rev 里：
 3. **设置** → 打开 **Tun Mode**
 4. 代理页面选 `PROXY` 组里的节点，或用「自动选择」
 
+### 3'. 想要订阅链接而不是本地文件
+
+不想 scp、想直接在 Clash Verge 里粘一条链接导入的话，让中转机自己把配置发出来。
+**在【中转1】上**执行：
+
+```bash
+R2=<中转2的IP> bash relay/serve-sub.sh
+```
+
+会打印一条 `http://<中转1IP>:<随机端口>/<64位随机token>.yaml`，
+以及一条 `clash://install-config?url=...` 一键导入链接。
+Clash Verge：配置 → `+` → **Remote** → 粘贴。
+
+链接**默认 30 分钟后自动失效**（导入一次就够了，不留长期暴露的入口）。
+想让 Clash 能自动更新订阅就加 `KEEP=1`，代价是链接一直挂在公网上。
+随时手动关：`systemctl stop clash-sub`；看谁取过：`journalctl -u clash-sub`。
+
+> 这条链接是明文 HTTP，里面有节点凭据。路径带 64 位随机 token、
+> 路径不对一律 404、不开目录列表，猜是猜不到的；但链路上的人能看到。
+> 用完就关是最稳的做法。托管在 GitHub raw 之类的公开地方则绝对不行——
+> 等于把你的节点白送给所有人。
+
 > Clash Verge Rev 的 GUI TUN 设置会覆盖配置文件里的 `tun:` 段，以 GUI 开关为准。
 
 ## 分流规则
