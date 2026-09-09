@@ -82,7 +82,9 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/yaml; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Content-Disposition", 'attachment; filename="my-vpn.yaml"')
+        # filename 不加引号：Clash Verge 会把带引号的值连转义符一起当成配置名，
+        # 显示成 \"my-vpn.yaml\"。RFC 6266 允许无特殊字符时用裸 token。
+        self.send_header("Content-Disposition", "attachment; filename=my-vpn.yaml")
         if UPDATE_H:
             self.send_header("Profile-Update-Interval", UPDATE_H)
         self.end_headers()
