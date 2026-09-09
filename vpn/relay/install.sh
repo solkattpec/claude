@@ -15,8 +15,11 @@
 # 可选：PORT1=443  PORT2=8443  DEST=www.yahoo.com  SB_VERSION=1.11.15
 set -euo pipefail
 
-LANDING1="${LANDING1:-}"
-LANDING2="${LANDING2:-}"
+# 也接受 credentials.env 里的 LANDING*_SPEC，这样重跑时
+#   set -a; . /root/vpn-out/credentials.env; set +a; bash relay/install.sh
+# 就够了，不用再手动贴落地的账号密码。
+LANDING1="${LANDING1:-${LANDING1_SPEC:-}}"
+LANDING2="${LANDING2:-${LANDING2_SPEC:-}}"
 PORT0="${PORT0:-2053}"   # 从中转机本身出口，不经落地
 PORT1="${PORT1:-443}"    # 转发到落地1
 PORT2="${PORT2:-8443}"   # 转发到落地2
