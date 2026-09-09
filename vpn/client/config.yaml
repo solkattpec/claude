@@ -1,13 +1,15 @@
 # ═══════════════════════════════════════════════════════════
-# Clash Verge Rev (mihomo 内核) — macOS 全局 TUN 配置
+# Clash Verge Rev (mihomo) — macOS 全局 TUN
 #
-# 占位符全部要替换（或用 render.sh 自动填）：
-#   __RELAY_IP__    中转机 IP
-#   __PORT__        中转机监听端口
-#   __UUID__        落地机脚本输出的 UUID
-#   __PUBLIC_KEY__  落地机脚本输出的 PublicKey
-#   __SHORT_ID__    落地机脚本输出的 ShortId
-#   __DEST__        落地机脚本输出的 Dest/SNI
+# 链路： Mac --VLESS-Reality--> 中转VPS --SOCKS5/HTTP--> 落地代理 --> 互联网
+#
+# 4 个节点 = 2 中转 × 2 落地。中转上一个端口对应一个落地，
+# 所以在 GUI 里切节点就等于切「走哪台中转 + 从哪个落地出去」。
+#
+# 占位符（用 render.sh 自动填）：
+#   __R1__ __R2__            两台中转机 IP
+#   __PORT1__ __PORT2__      中转机上对应落地1 / 落地2 的端口
+#   __UUID__ __PUBLIC_KEY__ __SHORT_ID__ __DEST__   中转机脚本输出的凭据
 # ═══════════════════════════════════════════════════════════
 
 mixed-port: 7897
@@ -26,27 +28,26 @@ profile:
   store-fake-ip: true
 
 # ─── TUN（全局接管）───────────────────────────────────────
-# 用 Clash Verge Rev 的话，优先用 GUI 里的「Tun Mode」开关，
-# GUI 设置会覆盖这里。这段是直接跑 mihomo 二进制时用的。
+# Clash Verge Rev 的 GUI「Tun Mode」开关会覆盖这一段，以 GUI 为准。
+# 这里保留是给直接跑 mihomo 二进制的场景用的。
 tun:
   enable: true
-  stack: gvisor          # macOS 上 gvisor 兼容性最好；追求速度可试 mixed
+  stack: gvisor          # macOS 上兼容性最好；想更快可试 mixed
   auto-route: true
   auto-detect-interface: true
-  strict-route: false    # macOS 上开 true 容易和 VPN/虚拟机打架
+  strict-route: false    # macOS 上开 true 容易和其他 VPN/虚拟机打架
   dns-hijack:
     - "any:53"
     - "tcp://any:53"
   mtu: 1500
 
 # ─── DNS ─────────────────────────────────────────────────
-# 走代理的域名用 fake-ip，真实解析交给落地机做，
-# 既不泄露 DNS，Netflix/YouTube 之类的地区判断也更准。
+# 走代理的域名用 fake-ip，不在本地解析，域名原样传到落地代理去解析：
+# 既不会 DNS 泄露，流媒体的地区判断也跟着落地 IP 走。
 dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: true
-  prefer-h3: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
@@ -94,12 +95,56 @@ sniffer:
     - "+.push.apple.com"
 
 # ─── 节点 ─────────────────────────────────────────────────
-# server 填【中转机】IP，加密握手实际在【落地机】终结。
 proxies:
-  - name: "landing"
+  - name: "R1-L1"          # 中转1 → 落地1
     type: vless
-    server: __RELAY_IP__
-    port: __PORT__
+    server: __R1__
+    port: __PORT1__
+    uuid: __UUID__
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: __DEST__
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: __PUBLIC_KEY__
+      short-id: "__SHORT_ID__"
+
+  - name: "R1-L2"          # 中转1 → 落地2
+    type: vless
+    server: __R1__
+    port: __PORT2__
+    uuid: __UUID__
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: __DEST__
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: __PUBLIC_KEY__
+      short-id: "__SHORT_ID__"
+
+  - name: "R2-L1"          # 中转2 → 落地1
+    type: vless
+    server: __R2__
+    port: __PORT1__
+    uuid: __UUID__
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: __DEST__
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: __PUBLIC_KEY__
+      short-id: "__SHORT_ID__"
+
+  - name: "R2-L2"          # 中转2 → 落地2
+    type: vless
+    server: __R2__
+    port: __PORT2__
     uuid: __UUID__
     network: tcp
     udp: true
@@ -114,21 +159,25 @@ proxies:
 proxy-groups:
   - name: PROXY
     type: select
-    proxies:
-      - landing
-      - DIRECT
+    proxies: [自动选择, R1-L1, R1-L2, R2-L1, R2-L2, DIRECT]
 
+  - name: 自动选择
+    type: url-test
+    proxies: [R1-L1, R1-L2, R2-L1, R2-L2]
+    url: "https://www.gstatic.com/generate_204"
+    interval: 300
+    tolerance: 50
+
+  # 流媒体单独一组：落地 IP 决定能不能解锁，两个落地可以分别试
   - name: 国外媒体
     type: select
-    proxies:
-      - PROXY
-      - landing
-      - DIRECT
+    proxies: [PROXY, R1-L1, R1-L2, R2-L1, R2-L2]
 
 # ─── 规则 ─────────────────────────────────────────────────
 rules:
   # 中转机自身流量必须直连，否则成环
-  - IP-CIDR,__RELAY_IP__/32,DIRECT,no-resolve
+  - IP-CIDR,__R1__/32,DIRECT,no-resolve
+  - IP-CIDR,__R2__/32,DIRECT,no-resolve
 
   - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
