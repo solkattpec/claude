@@ -63,6 +63,9 @@ import http.server, socketserver, os, sys
 TOKEN = os.environ["SUB_TOKEN"]
 FILE  = os.environ["SUB_FILE"]
 PORT  = int(os.environ["SUB_PORT"])
+# 只有常驻模式(KEEP=1)才让客户端定时自动更新；
+# 临时链接会在几十分钟后关掉，再让客户端天天去拉只会天天报错。
+UPDATE_H = os.environ.get("SUB_UPDATE_HOURS", "")
 
 class H(http.server.BaseHTTPRequestHandler):
     server_version = "nginx"
@@ -80,7 +83,8 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/yaml; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Content-Disposition", 'attachment; filename="my-vpn.yaml"')
-        self.send_header("Profile-Update-Interval", "24")
+        if UPDATE_H:
+            self.send_header("Profile-Update-Interval", UPDATE_H)
         self.end_headers()
         return data
 
@@ -121,7 +125,10 @@ else
   LIFE="${TTL} 秒后自动关闭"
 fi
 
+[ "$KEEP" = "1" ] && UPDATE_HOURS=24 || UPDATE_HOURS=""
+
 systemd-run --unit=clash-sub --collect \
+  --setenv=SUB_UPDATE_HOURS="$UPDATE_HOURS" \
   --setenv=SUB_TOKEN="$TOKEN" \
   --setenv=SUB_FILE="$SUBDIR/${TOKEN}.yaml" \
   --setenv=SUB_PORT="$SUB_PORT" \
@@ -167,6 +174,9 @@ echo "Clash Verge 一键导入（Mac 上直接点/在浏览器地址栏敲）：
 echo "clash://install-config?url=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$URL")"
 echo
 echo "或者在 Clash Verge：配置 → 右上角 + → Remote → 粘贴上面那条 http 链接"
+echo
+echo "链接失效【不影响】已导入的节点：配置存在客户端本地，节点连的是中转机，照常用。"
+echo "失效后只是点「更新」拉不到新配置而已，已有配置不会被清掉。"
 echo
 echo "导完就关掉（不留后门）：  systemctl stop clash-sub"
 echo "看谁取过：                journalctl -u clash-sub"
